@@ -10,6 +10,7 @@ log.setLevel(logging.DEBUG)
 _URI_WS = 'wss://plasma-relay-backend.timex.io/socket/relay'
 
 ETHUSD = "ETHUSD"
+ETHAUD = "ETHAUD"
 
 
 class WsClientTimex:
