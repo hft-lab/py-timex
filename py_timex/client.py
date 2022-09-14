@@ -22,40 +22,68 @@ class WsClientTimex:
             self._loop = loop
         self._api_key = api_key
         self._api_secret = api_secret
-        self._connected = threading.Event()
         self._ws = None
-        self._subscriptions = []
+        self._markets = []
         self._background_updater_thread = None
         self.order_books = {}
         self._closed = False
+        self._connected = threading.Event()
+        self._all_markets = {}
+        if self._markets is None:
+            raise ValueError("missing required argument")
 
     def subscribe(self, market):
+        self._markets.append(market)
+        self.order_books[market] = {"bid": [], "ask": []}
+
+    def _request_order_book(self, market):
+        return self._rest_message("stub", {"market": market})
+
+    def _rest_message(self, request_id: str, payload: dict):
+        msg = {
+            "type": "REST",
+            "requestId": request_id,
+            "stream": "/get/public/orderbook/raw",
+            "auth": {
+                "id": self._api_key,
+                "secret": self._api_secret
+            },
+            "payload": payload,
+        }
+        return self._ws.send_json(msg)
+
+    def _subscribe(self, market):
         msg = {
             "type": "SUBSCRIBE",
             "requestId": "uniqueID",
             "pattern": "/orderbook.raw/%s" % market,
+            "auth": {
+                "id": self._api_key,
+                "secret": self._api_secret
+            },
         }
-        self.order_books[market] = {"bid": [], "ask": []}
-        self._subscriptions.append(json.dumps(msg))
-        if self._connected.is_set():
-            self._loop.run_until_complete(self._ws.send_str(msg))
+        return self._ws.send_json(msg)
 
-    async def _run_orderbook_updater(self):
+    async def _subscribe_all_markets(self):
+        for market in self._markets:
+            await self._subscribe(market)
+            await self._request_order_book(market)
+
+    async def _run_orderbook_updater(self, callback):
         async with aiohttp.ClientSession() as s:
             async with s.ws_connect(_URI_WS) as ws:
-                log.info("connected")
-                self._ws = ws
                 self._connected.set()
                 try:
-                    for msg in self._subscriptions:
-                        await ws.send_str(msg)
+                    log.info("connected")
+                    self._ws = ws
+                    asyncio.create_task(self._subscribe_all_markets())
                     async for msg in ws:
-                        self._process_msg(msg)
+                        self._process_msg(msg, callback)
                 finally:
                     self._connected.clear()
         log.info("disconnected")
 
-    def _handle_ob_update(self, data: dict):
+    def _handle_ob_update(self, data: dict, callback: callable):
         message_type = data.get("type", "")
         if message_type != "MESSAGE":
             return
@@ -72,18 +100,20 @@ class WsClientTimex:
             raw_ob = data["rawOrderBook"]
             ob["bid"] = raw_ob["bid"]
             ob["ask"] = raw_ob["ask"]
+            ob["exchange"] = "TIMEX"
+            ob["market"] = market
+            callback(ob)
         except KeyError:
             log.exception("invalid data")
-        #print(self.order_books)
 
-    def _process_msg(self, msg: aiohttp.WSMessage):
+    def _process_msg(self, msg: aiohttp.WSMessage, callback: callable):
         if msg.type == aiohttp.WSMsgType.TEXT:
             try:
                 data = json.loads(msg.data)
                 msg_type = data.get("type")
                 if msg_type is None:
                     log.info("unknown data type: %s", msg.data)
-                self._handle_ob_update(data)
+                self._handle_ob_update(data, callback)
             except json.JSONDecodeError:
                 log.exception("failed to decode json")
         elif msg.type == aiohttp.WSMsgType.PONG:
@@ -91,18 +121,20 @@ class WsClientTimex:
         else:
             log.info("unknown message type: %s", msg.type)
 
-    def run_orderbook_updater(self, *args, **kwargs):
+    def run_orderbook_updater(self, callback):
         while True:
             try:
-                self._loop.run_until_complete(self._run_orderbook_updater(*args, **kwargs))
+                self._loop.run_until_complete(self._run_orderbook_updater(callback))
             except Exception as e:
                 log.exception("timex orderbook updater")
             if self._closed:
                 return
             log.info("reconnecting")
 
-    def start_background_updater(self):
-        self._background_updater_thread = threading.Thread(target=self.run_orderbook_updater)
+    def start_background_updater(self, callback):
+        self._background_updater_thread = threading.Thread(
+            target=self.run_orderbook_updater,
+            args=(callback,))
         self._background_updater_thread.start()
 
     def stop_background_updater(self):
