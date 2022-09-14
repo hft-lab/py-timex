@@ -24,13 +24,17 @@ class WsClientTimex:
         self._connected = threading.Event()
         self._ws = None
         self._subscriptions = []
+        self._background_updater_thread = None
+        self.order_books = {}
+        self._closed = False
 
-    def subscribe(self, pair):
+    def subscribe(self, market):
         msg = {
             "type": "SUBSCRIBE",
             "requestId": "uniqueID",
-            "pattern": "/orderbook.raw/%s" % pair,
+            "pattern": "/orderbook.raw/%s" % market,
         }
+        self.order_books[market] = {"bid": [], "ask": []}
         self._subscriptions.append(json.dumps(msg))
         if self._connected.is_set():
             self._loop.run_until_complete(self._ws.send_str(msg))
@@ -50,6 +54,27 @@ class WsClientTimex:
                     self._connected.clear()
         log.info("disconnected")
 
+    def _handle_ob_update(self, data: dict):
+        message_type = data.get("type", "")
+        if message_type != "MESSAGE":
+            return
+        try:
+            message = data["message"]
+            if message["event"]["type"] != "RAW_ORDER_BOOK_UPDATED":
+                return
+            data = message["event"]["data"]
+            market = data["market"]
+            ob = self.order_books.get(market)
+            if ob is None:
+                log.error("unknown market %s", market)
+                return
+            raw_ob = data["rawOrderBook"]
+            ob["bid"] = raw_ob["bid"]
+            ob["ask"] = raw_ob["ask"]
+        except KeyError:
+            log.exception("invalid data")
+        #print(self.order_books)
+
     def _process_msg(self, msg: aiohttp.WSMessage):
         if msg.type == aiohttp.WSMsgType.TEXT:
             try:
@@ -57,7 +82,7 @@ class WsClientTimex:
                 msg_type = data.get("type")
                 if msg_type is None:
                     log.info("unknown data type: %s", msg.data)
-                log.info(msg_type)
+                self._handle_ob_update(data)
             except json.JSONDecodeError:
                 log.exception("failed to decode json")
         elif msg.type == aiohttp.WSMsgType.PONG:
@@ -71,8 +96,14 @@ class WsClientTimex:
                 self._loop.run_until_complete(self._run_orderbook_updater(*args, **kwargs))
             except Exception as e:
                 log.exception("timex orderbook updater")
+            if self._closed:
+                return
             log.info("reconnecting")
 
     def start_background_updater(self):
+        self._background_updater_thread = threading.Thread(target=self.run_orderbook_updater)
+        self._background_updater_thread.start()
+
+    def stop_background_updater(self):
+        # TBD
         pass
-        #  ping_thread = threading.Thread()

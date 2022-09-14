@@ -3,6 +3,8 @@ INSTALL
 
 ```shell
 git clone git@github.com:hft-lab/py-timex.git
+# also may be cloned via https
+# git clone https://github.com/hft-lab/py-timex.git
 pip install py-timex
 ```
 
