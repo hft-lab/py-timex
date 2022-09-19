@@ -17,6 +17,7 @@ ETHAUD = "ETHAUD"
 
 
 OrderBook = collections.namedtuple("OrderBook", ["exchange", "market", "bids", "asks"])
+Entry = collections.namedtuple("Entry", ["price", "volume"])
 
 
 class WsClientTimex:
@@ -90,15 +91,12 @@ class WsClientTimex:
             log.error("unknown market %s", market)
             return
         ob.bids.clear()
-        ob.bids.extend(bids)
+        for bid in bids:
+            ob.bids.append(Entry(price=float(bid["price"]), volume=float(bid["quantity"])))
         ob.asks.clear()
-        ob.asks.extend(asks)
+        for ask in asks:
+            ob.asks.append(Entry(price=float(ask["price"]), volume=float(ask["quantity"])))
         callback(ob)
-
-    def _handle_rest(self, data: dict, callback: callable):
-        if data.get("requestId") is None:
-            log.error("missing requestId")
-            return
 
     def _process_msg(self, msg: aiohttp.WSMessage, callback: callable):
         if msg.type == aiohttp.WSMsgType.TEXT:

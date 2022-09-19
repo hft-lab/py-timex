@@ -17,7 +17,12 @@ updates_received = 0
 def handle_update(update: OrderBook):
     global updates_received
     updates_received += 1
-    print(update.market, len(update.bids), len(update.asks))
+    print(f"update {update.market} bids: {len(update.bids)} asks: {len(update.asks)}")
+    for bid in update.bids:
+        print(f"\tbid:\tprice: {bid.price}\tvolume: {bid.volume}")
+    for ask in update.asks:
+        print(f"\task:\tprice: {ask.price}\tvolume: {ask.volume}")
+    print()
 
 
 client = WsClientTimex(api_key, api_secret)
