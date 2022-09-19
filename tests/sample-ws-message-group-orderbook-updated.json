@@ -1,0 +1,45 @@
+{
+  "subscriptionId": "2b670d07-3b7f-40f2-9d37-3e5c2702ca60",
+  "message": {
+    "event": {
+      "timestamp": "2022-09-19T17:57:05.158",
+      "type": "GROUP_ORDER_BOOK_UPDATED",
+      "reference": "ETHUSD",
+      "topics": [
+        "ETHUSD"
+      ],
+      "data": {
+        "market": "ETHUSD",
+        "orderbook": {
+          "timestamp": "2022-09-19T17:57:05.129",
+          "bid": [
+            {
+              "price": "1326.3",
+              "volume": "6",
+              "volumeQuote": "7957.8"
+            },
+            {
+              "price": "0.1",
+              "volume": "1.549",
+              "volumeQuote": "0.1549"
+            }
+          ],
+          "ask": [
+            {
+              "price": "1336.9",
+              "volume": "7.334",
+              "volumeQuote": "9804.8246"
+            },
+            {
+              "price": "9999",
+              "volume": "0.01",
+              "volumeQuote": "99.99"
+            }
+          ]
+        }
+      }
+    },
+    "payload": null
+  },
+  "type": "MESSAGE"
+}

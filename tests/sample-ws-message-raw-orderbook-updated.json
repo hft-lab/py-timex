@@ -1,0 +1,61 @@
+{
+  "subscriptionId": "972a80a5-8a9b-4385-a74b-6e2589653839",
+  "message": {
+    "event": {
+      "timestamp": "2022-09-19T18:03:39.163",
+      "type": "RAW_ORDER_BOOK_UPDATED",
+      "reference": "ETHUSD",
+      "topics": [
+        "ETHUSD"
+      ],
+      "data": {
+        "market": "ETHUSD",
+        "rawOrderBook": {
+          "timestamp": "2022-09-19T18:03:39.122Z",
+          "bid": [
+            {
+              "market": "ETHUSD",
+              "hash": "0x68e6af4f2583477aa8bbc3ebf01ed6c37efb71678a7fa1869b19684dbc5b2976",
+              "direction": "BUY",
+              "quantity": "6",
+              "price": "1323.3",
+              "createdAt": "2022-09-19T18:03:29.618",
+              "expiredAt": "2022-09-19T18:04:29.597"
+            },
+            {
+              "market": "ETHUSD",
+              "hash": "0x7fc3a2a6ce36ed425e172fa7ec2c8d00c6cde5411dd7645fe52c185957ab7c00",
+              "direction": "BUY",
+              "quantity": "0.059",
+              "price": "0.1",
+              "createdAt": "2022-09-19T18:01:41.101",
+              "expiredAt": "2022-09-19T18:07:41.073"
+            }
+          ],
+          "ask": [
+            {
+              "market": "ETHUSD",
+              "hash": "0xceaf6600395cef320414ace58fd71556467a069b1862f61943998e8ce6713256",
+              "direction": "SELL",
+              "quantity": "6.667",
+              "price": "1336.2",
+              "createdAt": "2022-09-19T18:03:29.672",
+              "expiredAt": "2022-09-19T18:04:29.646"
+            },
+            {
+              "market": "ETHUSD",
+              "hash": "0x3c45062d5c7acf6e01e80d2b505c2aa619198e84281c9d232feec3c46efbaf80",
+              "direction": "SELL",
+              "quantity": "0.01",
+              "price": "9999",
+              "createdAt": "2022-01-03T22:42:07.453",
+              "expiredAt": "2122-01-03T22:42:08.93"
+            }
+          ]
+        }
+      }
+    },
+    "payload": null
+  },
+  "type": "MESSAGE"
+}

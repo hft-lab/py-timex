@@ -1,8 +1,11 @@
+import collections
+
 import aiohttp
 import asyncio
 import logging
 import threading
 import json
+import time
 
 log = logging.getLogger("py-timex")
 log.setLevel(logging.DEBUG)
@@ -11,6 +14,9 @@ _URI_WS = 'wss://plasma-relay-backend.timex.io/socket/relay'
 
 ETHUSD = "ETHUSD"
 ETHAUD = "ETHAUD"
+
+
+OrderBook = collections.namedtuple("OrderBook", ["exchange", "market", "bids", "asks"])
 
 
 class WsClientTimex:
@@ -23,21 +29,16 @@ class WsClientTimex:
         self._api_key = api_key
         self._api_secret = api_secret
         self._ws = None
-        self._markets = []
         self._background_updater_thread = None
         self.order_books = {}
         self._closed = False
         self._connected = threading.Event()
-        self._all_markets = {}
-        if self._markets is None:
-            raise ValueError("missing required argument")
 
     def subscribe(self, market):
-        self._markets.append(market)
-        self.order_books[market] = {"bid": [], "ask": []}
+        self.order_books[market] = OrderBook(exchange="TIMEX", market=market, bids=[], asks=[])
 
     def _request_order_book(self, market):
-        return self._rest_message("stub", {"market": market})
+        return self._rest_message("get_orderbook", {"market": market})
 
     def _rest_message(self, request_id: str, payload: dict):
         msg = {
@@ -65,9 +66,9 @@ class WsClientTimex:
         return self._ws.send_json(msg)
 
     async def _subscribe_all_markets(self):
-        for market in self._markets:
-            await self._subscribe(market)
+        for market in self.order_books.keys():
             await self._request_order_book(market)
+            await self._subscribe(market)
 
     async def _run_orderbook_updater(self, callback):
         async with aiohttp.ClientSession() as s:
@@ -83,39 +84,56 @@ class WsClientTimex:
                     self._connected.clear()
         log.info("disconnected")
 
-    def _handle_ob_update(self, data: dict, callback: callable):
-        message_type = data.get("type", "")
-        if message_type != "MESSAGE":
+    def _handle_ob_update(self, market: str, bids: list, asks: list, callback: callable):
+        ob = self.order_books.get(market)
+        if ob is None:
+            log.error("unknown market %s", market)
             return
-        try:
-            message = data["message"]
-            if message["event"]["type"] != "RAW_ORDER_BOOK_UPDATED":
-                return
-            data = message["event"]["data"]
-            market = data["market"]
-            ob = self.order_books.get(market)
-            if ob is None:
-                log.error("unknown market %s", market)
-                return
-            raw_ob = data["rawOrderBook"]
-            ob["bid"] = raw_ob["bid"]
-            ob["ask"] = raw_ob["ask"]
-            ob["exchange"] = "TIMEX"
-            ob["market"] = market
-            callback(ob)
-        except KeyError:
-            log.exception("invalid data")
+        ob.bids.clear()
+        ob.bids.extend(bids)
+        ob.asks.clear()
+        ob.asks.extend(asks)
+        callback(ob)
+
+    def _handle_rest(self, data: dict, callback: callable):
+        if data.get("requestId") is None:
+            log.error("missing requestId")
+            return
 
     def _process_msg(self, msg: aiohttp.WSMessage, callback: callable):
         if msg.type == aiohttp.WSMsgType.TEXT:
             try:
-                data = json.loads(msg.data)
-                msg_type = data.get("type")
-                if msg_type is None:
-                    log.info("unknown data type: %s", msg.data)
-                self._handle_ob_update(data, callback)
+                obj = json.loads(msg.data)
+                msg_type = obj.get("type")
+                if msg_type == "MESSAGE":
+                    data = obj["message"]["event"]["data"]
+                    return self._handle_ob_update(
+                        data["market"],
+                        data["rawOrderBook"]["bid"],
+                        data["rawOrderBook"]["ask"],
+                        callback)
+                request_id = obj.get("requestId")
+                if request_id is not None:
+                    log.info("first raw orderbook received")
+                    r_body = obj.get("responseBody")
+                    if r_body is None:
+                        print(obj)
+                        return
+                    asks = r_body["ask"]
+                    bids = r_body["bid"]
+                    if len(asks) != 0:
+                        market = asks[0]["market"]
+                    elif len(bids) != 0:
+                        market = bids[0]["market"]
+                    else:
+                        log.warning("empty update")
+                        return
+                    self._handle_ob_update(market, bids, asks, callback)
+
             except json.JSONDecodeError:
                 log.exception("failed to decode json")
+            except KeyError:
+                log.exception("invalid data")
         elif msg.type == aiohttp.WSMsgType.PONG:
             log.info("PONG received")
         else:
@@ -129,6 +147,7 @@ class WsClientTimex:
                 log.exception("timex orderbook updater")
             if self._closed:
                 return
+            time.sleep(1)
             log.info("reconnecting")
 
     def start_background_updater(self, callback):
@@ -138,5 +157,6 @@ class WsClientTimex:
         self._background_updater_thread.start()
 
     def stop_background_updater(self):
-        # TBD
-        pass
+        log.info("stopping background updater")
+        self._closed = True
+        self._loop.create_task(self._ws.close())

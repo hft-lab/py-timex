@@ -1,0 +1,47 @@
+{
+  "requestId": "get_orderbook",
+  "status": "SUCCESS",
+  "responseBody": {
+    "timestamp": "2022-09-19T17:54:27.825Z",
+    "bid": [
+      {
+        "index": "49",
+        "price": "1324",
+        "baseTokenAmount": "6",
+        "baseTokenCumulativeAmount": "6",
+        "quoteTokenAmount": "7944",
+        "quoteTokenCumulativeAmount": "7944",
+        "ownerOrdersInLevel": false
+      },
+      {
+        "index": "13288",
+        "price": "0.1",
+        "baseTokenAmount": "5.157",
+        "baseTokenCumulativeAmount": "100.157",
+        "quoteTokenAmount": "0.5157",
+        "quoteTokenCumulativeAmount": "125549.4152",
+        "ownerOrdersInLevel": false
+      }
+    ],
+    "ask": [
+      {
+        "index": "-50",
+        "price": "1333.9",
+        "baseTokenAmount": "7.334",
+        "baseTokenCumulativeAmount": "7.334",
+        "quoteTokenAmount": "9782.8226",
+        "quoteTokenCumulativeAmount": "9782.8226",
+        "ownerOrdersInLevel": false
+      },
+      {
+        "index": "-86701",
+        "price": "9999",
+        "baseTokenAmount": "0.01",
+        "baseTokenCumulativeAmount": "85.46021282820705176",
+        "quoteTokenAmount": "99.99",
+        "quoteTokenCumulativeAmount": "114793.4547",
+        "ownerOrdersInLevel": false
+      }
+    ]
+  }
+}

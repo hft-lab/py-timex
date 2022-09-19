@@ -1,0 +1,47 @@
+{
+  "requestId": "get_orderbook",
+  "status": "SUCCESS",
+  "responseBody": {
+    "timestamp": "2022-09-19T18:05:32.366Z",
+    "bid": [
+      {
+        "market": "BTCUSD",
+        "hash": "0x281c20142b9453cdfde41449515d97c0f05136f8b5db93c17e6119f61e0ca6e9",
+        "direction": "BUY",
+        "quantity": "0.3333",
+        "price": "18911",
+        "createdAt": "2022-09-19T18:05:28.723",
+        "expiredAt": "2022-09-19T18:06:28.688"
+      },
+      {
+        "market": "BTCUSD",
+        "hash": "0x86b90ee5f37c6e693bd506634ef66badb765b807d973e909291947edcf4ddb76",
+        "direction": "BUY",
+        "quantity": "2.6667",
+        "price": "18879",
+        "createdAt": "2022-09-19T18:05:25.333",
+        "expiredAt": "2022-09-19T18:06:25.3"
+      }
+    ],
+    "ask": [
+      {
+        "market": "BTCUSD",
+        "hash": "0xc2061e80dc9e11bec8645bf8c9e2fe7c3af71a8f501723101ffaf83f7b5bc52d",
+        "direction": "SELL",
+        "quantity": "0.3333",
+        "price": "19046",
+        "createdAt": "2022-09-19T18:05:28.593",
+        "expiredAt": "2022-09-19T18:06:28.562"
+      },
+      {
+        "market": "BTCUSD",
+        "hash": "0x5e712e886b53a40f272e7983d4e8aea5c560aceffbe74e24d233903eff3dd530",
+        "direction": "SELL",
+        "quantity": "0.0005",
+        "price": "111111",
+        "createdAt": "2022-01-03T22:51:06.931",
+        "expiredAt": "2122-01-03T22:51:08.433"
+      }
+    ]
+  }
+}
