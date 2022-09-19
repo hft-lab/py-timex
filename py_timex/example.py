@@ -23,6 +23,9 @@ def handle_update(update: OrderBook):
     for ask in update.asks:
         print(f"\task:\tprice: {ask.price}\tvolume: {ask.volume}")
     print()
+    print("also possible to access any current orderbook:")
+    print(client.order_books["ETHUSD"].bids)
+    print()
 
 
 client = WsClientTimex(api_key, api_secret)
