@@ -1,0 +1,24 @@
+{
+  "requestId": "6A275......3F4D",
+  "status": "SUCCESS",
+  "responseBody": {
+    "orders": [
+      {
+        "id": "0x17fe351204ba......f6b6c52f026",
+        "cursorId": 1893903546,
+        "clientOrderId": null,
+        "symbol": "ETHAUDT",
+        "side": "BUY",
+        "type": "LIMIT",
+        "quantity": "36",
+        "filledQuantity": "0",
+        "cancelledQuantity": "0",
+        "price": "1",
+        "avgPrice": null,
+        "createdAt": "2022-09-20T21:24:56.403Z",
+        "updatedAt": "2022-09-20T21:24:56.403Z",
+        "expireTime": "2022-09-20T21:24:56.393Z"
+      }
+    ]
+  }
+}

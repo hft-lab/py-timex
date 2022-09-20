@@ -22,10 +22,14 @@ BTCUSD = "BTCUSD"
 ETHAUDT = "ETHAUDT"
 
 _eventTypeRawOrderBookUpdated = "RAW_ORDER_BOOK_UPDATED"
+_eventTypeAccountSubscription = "ACCOUNT_SUBSCRIPTION"
 
 OrderBook = collections.namedtuple("OrderBook", ["exchange", "market", "bids", "asks"])
 Entry = collections.namedtuple("Entry", ["price", "volume"])
 Balance = collections.namedtuple("Balance", ['currency', 'total_balance', 'locked_balance'])
+# TODO: add all fields
+Order = collections.namedtuple("Order",
+                               ['id', 'symbol', 'side', 'type', 'quantity', 'price'])
 
 
 class WsClientTimex:
@@ -50,6 +54,14 @@ class WsClientTimex:
         self._http_rest_auth = "Basic " + basic_auth.decode("ascii")
         me = self._http_rest("GET", "/custody/credentials/me")
         self.address = me["address"]
+        self._balances_callback = None
+        self._orders_callback = None
+
+    def subscribe_balances(self, callback: callable):
+        self._balances_callback = callback
+
+    def subscribe_orders(self, callback: callable):
+        self._orders_callback = callback
 
     def _http_rest(self, method: str, path: str):
         conn = http.client.HTTPSConnection(_HOSTNAME_REST)
@@ -78,6 +90,19 @@ class WsClientTimex:
         await self._ws.send_json(msg)
         self._rest_queries[request_id] = callback
 
+    def _account_subscribe(self):
+        msg = {
+            "type": "ACCOUNT_SUBSCRIBE",
+            "requestId": "acs",
+            "account": self.address,
+            "auth": {
+                "id": self._api_key,
+                "secret": self._api_secret,
+            },
+            "snapshot": True,
+        }
+        return self._ws.send_json(msg)
+
     def _subscribe(self, market: str):
         msg = {
             "type": "SUBSCRIBE",
@@ -90,10 +115,11 @@ class WsClientTimex:
         }
         return self._ws.send_json(msg)
 
-    async def _subscribe_all_markets(self):
+    async def _subscribe_all(self):
         await self._ws_rest("/get/trading/balances",
                             {},
                             self._handle_rest_balances)
+        await self._account_subscribe()
         for market in self.order_books.keys():
             await self._ws_rest("/get/public/orderbook/raw",
                                 {"market": market},
@@ -119,6 +145,9 @@ class WsClientTimex:
                               total_balance=b["totalBalance"],
                               locked_balance=b["lockedBalance"])
             self.balances[balance.currency] = balance
+        if self._balances_callback is not None:
+            for balance in self.balances.values():
+                self._balances_callback(balance)
 
     def _handle_rest_orderbook(self, obj: dict):
         status = obj.get("status")
@@ -140,11 +169,39 @@ class WsClientTimex:
             return
         self._handle_ob_update(market, bids, asks)
 
+    def _handle_ws_account_subscription(self, obj: dict):
+        payload = obj.get("payload")
+        balance = payload.get("balance")
+        if balance is not None:
+            if self._balances_callback is not None:
+                self._balances_callback(
+                    Balance(currency=balance["currency"],
+                            total_balance=float(balance["totalBalance"]),
+                            locked_balance=float(balance["lockedBalance"])))
+            return
+        order = payload.get("order")
+        if order is not None:
+            if self._orders_callback is not None:
+                self._orders_callback(
+                    Order(
+                        id=order["id"],
+                        symbol=order["symbol"],
+                        side=order["side"],
+                        type=order["type"],
+                        quantity=float(order["quantity"]),
+                        price=float(order["price"]),
+                    ))
+            return
+        log.info("unknown")
+        log.info(obj)
+
     def _process_msg(self, msg: aiohttp.WSMessage):
         if msg.type == aiohttp.WSMsgType.TEXT:
             try:
                 obj = json.loads(msg.data)
                 msg_type = obj.get("type")
+                if msg_type == _eventTypeAccountSubscription:
+                    return self._handle_ws_account_subscription(obj)
                 if msg_type == "MESSAGE":
                     event = obj["message"]["event"]
                     if event["type"] == _eventTypeRawOrderBookUpdated:
@@ -184,7 +241,7 @@ class WsClientTimex:
                 try:
                     log.info("connected")
                     self._ws = ws
-                    asyncio.create_task(self._subscribe_all_markets())
+                    asyncio.create_task(self._subscribe_all())
                     async for msg in ws:
                         self._process_msg(msg)
                 finally:

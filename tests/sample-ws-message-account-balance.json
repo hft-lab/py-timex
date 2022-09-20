@@ -1,0 +1,11 @@
+{
+  "type": "ACCOUNT_SUBSCRIPTION",
+  "subscriptionId": "7703fa42-2db2-42b0-a04d-93d4e3090a34",
+  "payload": {
+    "balance": {
+      "currency": "AUDT",
+      "totalBalance": "111.672571309375",
+      "lockedBalance": "36.09"
+    }
+  }
+}

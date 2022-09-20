@@ -1,0 +1,79 @@
+{
+  "type": "SUBSCRIBED",
+  "requestId": "acs",
+  "subscriptionId": "8e30ad2b-a397-422f-9fbc-4fbaad7b6b61",
+  "payload": {
+    "snapshot": {
+      "balances": [
+        {
+          "currency": "SAI",
+          "totalBalance": "0",
+          "lockedBalance": "0"
+        },
+        {
+          "currency": "LINK",
+          "totalBalance": "0",
+          "lockedBalance": "0"
+        },
+        {
+          "currency": "TNDR",
+          "totalBalance": "0",
+          "lockedBalance": "0"
+        },
+        {
+          "currency": "PUP",
+          "totalBalance": "0",
+          "lockedBalance": "0"
+        },
+        {
+          "currency": "AXS",
+          "totalBalance": "0",
+          "lockedBalance": "0"
+        },
+        {
+          "currency": "TIME",
+          "totalBalance": "0.00123249098837567187",
+          "lockedBalance": "0"
+        }
+      ],
+      "openOrders": [
+        {
+          "market": "TCPUSDT",
+          "orders": [],
+          "pageNumber": 0,
+          "totalPageCount": 0
+        },
+        {
+          "market": "LTCAUDT",
+          "orders": [],
+          "pageNumber": 0,
+          "totalPageCount": 0
+        },
+        {
+          "market": "EOSUSDT",
+          "orders": [],
+          "pageNumber": 0,
+          "totalPageCount": 0
+        },
+        {
+          "market": "USDCUSDT",
+          "orders": [],
+          "pageNumber": 0,
+          "totalPageCount": 0
+        },
+        {
+          "market": "CGUAUDT",
+          "orders": [],
+          "pageNumber": 0,
+          "totalPageCount": 0
+        },
+        {
+          "market": "TIMEETH",
+          "orders": [],
+          "pageNumber": 0,
+          "totalPageCount": 0
+        }
+      ]
+    }
+  }
+}

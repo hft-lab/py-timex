@@ -1,0 +1,24 @@
+{
+  "type": "ACCOUNT_SUBSCRIPTION",
+  "subscriptionId": "7703fa42-2db2-42b0-a04d-93d4e3090a34",
+  "payload": {
+    "order": {
+      "id": "0x32bdca69a6d1bcf6ca1c3a0b734abe669c35b3e2821506642f5e96f041da5c39",
+      "cursorId": 1893929467,
+      "clientOrderId": null,
+      "symbol": "ETHAUDT",
+      "side": "BUY",
+      "type": "LIMIT",
+      "quantity": "36",
+      "filledQuantity": "0",
+      "cancelledQuantity": "0",
+      "price": "1",
+      "avgPrice": null,
+      "createdAt": "2022-09-20T21:40:23.324Z",
+      "updatedAt": "2022-09-20T21:40:23.324Z",
+      "expireTime": "2022-09-20T21:40:26.323Z"
+    },
+    "messageType": "ORDER",
+    "orderStatus": "ACTIVE"
+  }
+}

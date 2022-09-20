@@ -24,20 +24,35 @@ def handle_update(update: timex.OrderBook):
     updates_received += 1
     log.info(f"update {update.market} bids: {len(update.bids)} asks: {len(update.asks)}")
     for bid in update.bids:
-        log.info(f"\tbid:\tprice: {bid.price}\tvolume: {bid.volume}")
+        log.info(f"bid price: {bid.price}\tvolume: {bid.volume}")
+        break
     for ask in update.asks:
-        log.info(f"\task:\tprice: {ask.price}\tvolume: {ask.volume}")
+        log.info(f"ask price: {ask.price}\tvolume: {ask.volume}")
+        break
     # also possible to access any current orderbook
-    symbol = timex.ETHUSD
-    log.info("%s: %s", symbol, client.order_books[symbol].bids)
+    log.info(client.order_books[timex.ETHUSD].bids[:3])
     # access to balances
-    for currency, balance in client.balances.items():
-        log.info(f"{currency}\t{balance.total_balance}")
+    try:
+        # TODO: must be filled upon client initialization
+        log.info(client.balances[timex.ETHUSD])
+    except KeyError:
+        pass
+
+
+def handle_balance(balance: timex.Balance):
+    log.info(balance)
+
+
+def handle_order(order: timex.Order):
+    # TODO: separate subscribe to cancelled/expired orders maybe
+    log.info(order)
 
 
 client = timex.WsClientTimex(cp["TIMEX"]["api_key"], cp["TIMEX"]["api_secret"])
 client.subscribe(timex.ETHUSD, handle_update)
 client.subscribe(timex.BTCUSD, handle_update)
+client.subscribe_balances(handle_balance)
+client.subscribe_orders(handle_order)
 
 try:
     client.run_updater()
