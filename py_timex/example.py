@@ -27,8 +27,12 @@ def handle_update(update: OrderBook):
         log.info(f"\tbid:\tprice: {bid.price}\tvolume: {bid.volume}")
     for ask in update.asks:
         log.info(f"\task:\tprice: {ask.price}\tvolume: {ask.volume}")
-    log.info("also possible to access any current orderbook:")
+    # also possible to access any current orderbook
     log.info("ETHUSD: %s", client.order_books["ETHUSD"].bids)
+    # access to balances
+    for currency, balance in client.balances.items():
+        log.info(f"{currency}\t{balance}")
+
 
 
 client = WsClientTimex(cp["TIMEX"]["api_key"], cp["TIMEX"]["api_secret"])

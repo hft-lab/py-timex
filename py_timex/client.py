@@ -19,6 +19,7 @@ ETHAUD = "ETHAUD"
 
 OrderBook = collections.namedtuple("OrderBook", ["exchange", "market", "bids", "asks"])
 Entry = collections.namedtuple("Entry", ["price", "volume"])
+Balance = collections.namedtuple("Balance", ['currency', 'total_balance', 'locked_balance'])
 
 
 class WsClientTimex:
@@ -33,6 +34,7 @@ class WsClientTimex:
         self._ws = None
         self._background_updater_thread = None
         self.order_books = {}
+        self.balances = {}
         self._closed = False
         self._connected = threading.Event()
         self._callbacks = {}
@@ -68,25 +70,14 @@ class WsClientTimex:
         return self._ws.send_json(msg)
 
     async def _subscribe_all_markets(self):
+        await self._call_rest("/get/trading/balances",
+                              {},
+                              self._handle_rest_balances)
         for market in self.order_books.keys():
             await self._call_rest("/get/public/orderbook/raw",
                                   {"market": market},
                                   self._handle_rest_orderbook)
             await self._subscribe(market)
-
-    async def _run_ws_loop(self):
-        async with aiohttp.ClientSession() as s:
-            async with s.ws_connect(_URI_WS) as ws:
-                self._connected.set()
-                try:
-                    log.info("connected")
-                    self._ws = ws
-                    asyncio.create_task(self._subscribe_all_markets())
-                    async for msg in ws:
-                        self._process_msg(msg)
-                finally:
-                    self._connected.clear()
-        log.info("disconnected")
 
     def _handle_ob_update(self, market: str, bids: list, asks: list):
         ob = self.order_books.get(market)
@@ -100,6 +91,13 @@ class WsClientTimex:
         for ask in asks:
             ob.asks.append(Entry(price=float(ask["price"]), volume=float(ask["quantity"])))
         self._callbacks[market](ob)
+
+    def _handle_rest_balances(self, obj: dict):
+        for b in obj.get("responseBody", []):
+            balance = Balance(currency=b["currency"],
+                              total_balance=b["totalBalance"],
+                              locked_balance=b["lockedBalance"])
+            self.balances[balance.currency] = balance
 
     def _handle_rest_orderbook(self, obj: dict):
         status = obj.get("status")
@@ -152,6 +150,20 @@ class WsClientTimex:
         else:
             log.info("unknown message type: %s", msg.type)
 
+    async def _run_ws_loop(self):
+        async with aiohttp.ClientSession() as s:
+            async with s.ws_connect(_URI_WS) as ws:
+                self._connected.set()
+                try:
+                    log.info("connected")
+                    self._ws = ws
+                    asyncio.create_task(self._subscribe_all_markets())
+                    async for msg in ws:
+                        self._process_msg(msg)
+                finally:
+                    self._connected.clear()
+        log.info("disconnected")
+
     def run_updater(self):
         while True:
             try:
@@ -162,17 +174,6 @@ class WsClientTimex:
                 return
             time.sleep(1)
             log.info("reconnecting")
-
-    def start_background_updater(self, callback):
-        self._background_updater_thread = threading.Thread(
-            target=self.run_updater,
-            args=(callback,))
-        self._background_updater_thread.start()
-
-    def stop_background_updater(self):
-        log.info("stopping background updater")
-        self._closed = True
-        self._loop.create_task(self._ws.close())
 
     def wait_closed(self):
         self._loop.run_until_complete(self._ws.close())
