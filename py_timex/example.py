@@ -22,15 +22,13 @@ updates_received = 0
 def handle_update(update: OrderBook):
     global updates_received
     updates_received += 1
-    print(f"update {update.market} bids: {len(update.bids)} asks: {len(update.asks)}")
+    log.info(f"update {update.market} bids: {len(update.bids)} asks: {len(update.asks)}")
     for bid in update.bids:
-        print(f"\tbid:\tprice: {bid.price}\tvolume: {bid.volume}")
+        log.info(f"\tbid:\tprice: {bid.price}\tvolume: {bid.volume}")
     for ask in update.asks:
-        print(f"\task:\tprice: {ask.price}\tvolume: {ask.volume}")
-    print()
-    print("also possible to access any current orderbook:")
-    print(client.order_books["ETHUSD"].bids)
-    print()
+        log.info(f"\task:\tprice: {ask.price}\tvolume: {ask.volume}")
+    log.info("also possible to access any current orderbook:")
+    log.info("ETHUSD: %s", client.order_books["ETHUSD"].bids)
 
 
 client = WsClientTimex(cp["TIMEX"]["api_key"], cp["TIMEX"]["api_secret"])

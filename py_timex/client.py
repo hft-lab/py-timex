@@ -6,6 +6,7 @@ import logging
 import threading
 import json
 import time
+import uuid
 
 log = logging.getLogger("py-timex")
 log.setLevel(logging.DEBUG)
@@ -35,26 +36,24 @@ class WsClientTimex:
         self._closed = False
         self._connected = threading.Event()
         self._callbacks = {}
+        self._rest_queries = {}
 
     def subscribe(self, market: str, callback: callable):
         self.order_books[market] = OrderBook(exchange="TIMEX", market=market, bids=[], asks=[])
         self._callbacks[market] = callback
 
-    def _request_order_book(self, market: str):
-        return self._rest_message("get_orderbook", {"market": market})
-
-    def _rest_message(self, request_id: str, payload: dict):
-        msg = {
-            "type": "REST",
-            "requestId": request_id,
-            "stream": "/get/public/orderbook/raw",
-            "auth": {
-                "id": self._api_key,
-                "secret": self._api_secret
-            },
-            "payload": payload,
-        }
-        return self._ws.send_json(msg)
+    async def _call_rest(self, stream: str, payload: dict, callback: callable):
+        request_id = str(uuid.uuid4())
+        msg = {"type": "REST",
+               "requestId": request_id,
+               "stream": stream,
+               "auth": {
+                   "id": self._api_key,
+                   "secret": self._api_secret
+               }, "payload": payload}
+        self._connected.wait()
+        await self._ws.send_json(msg)
+        self._rest_queries[request_id] = callback
 
     def _subscribe(self, market: str):
         msg = {
@@ -70,10 +69,12 @@ class WsClientTimex:
 
     async def _subscribe_all_markets(self):
         for market in self.order_books.keys():
-            await self._request_order_book(market)
+            await self._call_rest("/get/public/orderbook/raw",
+                                  {"market": market},
+                                  self._handle_rest_orderbook)
             await self._subscribe(market)
 
-    async def _run_orderbook_updater(self):
+    async def _run_ws_loop(self):
         async with aiohttp.ClientSession() as s:
             async with s.ws_connect(_URI_WS) as ws:
                 self._connected.set()
@@ -100,6 +101,26 @@ class WsClientTimex:
             ob.asks.append(Entry(price=float(ask["price"]), volume=float(ask["quantity"])))
         self._callbacks[market](ob)
 
+    def _handle_rest_orderbook(self, obj: dict):
+        status = obj.get("status")
+        if status != "SUCCESS":
+            log.error("rest orderbook request error: %s (%s)", status, obj.get("message"))
+            log.error(obj)
+            return
+        r_body = obj.get("responseBody")
+        if r_body is None:
+            return
+        asks = r_body["ask"]
+        bids = r_body["bid"]
+        if len(asks) != 0:
+            market = asks[0]["market"]
+        elif len(bids) != 0:
+            market = bids[0]["market"]
+        else:
+            log.warning("empty update")
+            return
+        self._handle_ob_update(market, bids, asks)
+
     def _process_msg(self, msg: aiohttp.WSMessage):
         if msg.type == aiohttp.WSMsgType.TEXT:
             try:
@@ -112,24 +133,16 @@ class WsClientTimex:
                         data["rawOrderBook"]["bid"],
                         data["rawOrderBook"]["ask"],
                         )
+                if msg_type == "SUBSCRIBED":
+                    return
                 request_id = obj.get("requestId")
                 if request_id is not None:
-                    log.info("first raw orderbook received")
-                    r_body = obj.get("responseBody")
-                    if r_body is None:
-                        print(obj)
+                    cb = self._rest_queries.get(request_id)
+                    if cb is None:
+                        log.error("Unknown rest request id: %s", request_id)
+                        log.error(msg.data)
                         return
-                    asks = r_body["ask"]
-                    bids = r_body["bid"]
-                    if len(asks) != 0:
-                        market = asks[0]["market"]
-                    elif len(bids) != 0:
-                        market = bids[0]["market"]
-                    else:
-                        log.warning("empty update")
-                        return
-                    self._handle_ob_update(market, bids, asks)
-
+                    cb(obj)
             except json.JSONDecodeError:
                 log.exception("failed to decode json")
             except KeyError:
@@ -142,7 +155,7 @@ class WsClientTimex:
     def run_updater(self):
         while True:
             try:
-                self._loop.run_until_complete(self._run_orderbook_updater())
+                self._loop.run_until_complete(self._run_ws_loop())
             except Exception as e:
                 log.exception("timex orderbook updater")
             if self._closed:
