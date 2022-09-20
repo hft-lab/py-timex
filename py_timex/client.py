@@ -33,8 +33,8 @@ class WsClientTimex:
         self._api_secret = api_secret
         self._ws = None
         self._background_updater_thread = None
-        self.order_books = {}
-        self.balances = {}
+        self.order_books = dict[str, OrderBook]()
+        self.balances = dict[str, Balance]()
         self._closed = False
         self._connected = threading.Event()
         self._callbacks = {}

@@ -31,8 +31,7 @@ def handle_update(update: OrderBook):
     log.info("ETHUSD: %s", client.order_books["ETHUSD"].bids)
     # access to balances
     for currency, balance in client.balances.items():
-        log.info(f"{currency}\t{balance}")
-
+        log.info(f"{currency}\t{balance.total_balance}")
 
 
 client = WsClientTimex(cp["TIMEX"]["api_key"], cp["TIMEX"]["api_secret"])
