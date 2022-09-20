@@ -1,4 +1,3 @@
-import time
 import logging
 
 from py_timex.client import WsClientTimex, OrderBook
@@ -29,14 +28,10 @@ def handle_update(update: OrderBook):
 
 
 client = WsClientTimex(api_key, api_secret)
-client.subscribe("ETHUSD")
-client.subscribe("BTCUSD")
-client.start_background_updater(handle_update)
+client.subscribe("ETHUSD", handle_update)
+client.subscribe("BTCUSD", handle_update)
 
 try:
-    while True:
-        time.sleep(10)
-        log.info("updates received: %s", updates_received)
+    client.run_updater()
 except KeyboardInterrupt:
-    log.info("exit")
-    client.stop_background_updater()
+    client.wait_closed()

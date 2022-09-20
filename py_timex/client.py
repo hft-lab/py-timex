@@ -34,11 +34,13 @@ class WsClientTimex:
         self.order_books = {}
         self._closed = False
         self._connected = threading.Event()
+        self._callbacks = {}
 
-    def subscribe(self, market):
+    def subscribe(self, market: str, callback: callable):
         self.order_books[market] = OrderBook(exchange="TIMEX", market=market, bids=[], asks=[])
+        self._callbacks[market] = callback
 
-    def _request_order_book(self, market):
+    def _request_order_book(self, market: str):
         return self._rest_message("get_orderbook", {"market": market})
 
     def _rest_message(self, request_id: str, payload: dict):
@@ -54,7 +56,7 @@ class WsClientTimex:
         }
         return self._ws.send_json(msg)
 
-    def _subscribe(self, market):
+    def _subscribe(self, market: str):
         msg = {
             "type": "SUBSCRIBE",
             "requestId": "uniqueID",
@@ -71,7 +73,7 @@ class WsClientTimex:
             await self._request_order_book(market)
             await self._subscribe(market)
 
-    async def _run_orderbook_updater(self, callback):
+    async def _run_orderbook_updater(self):
         async with aiohttp.ClientSession() as s:
             async with s.ws_connect(_URI_WS) as ws:
                 self._connected.set()
@@ -80,12 +82,12 @@ class WsClientTimex:
                     self._ws = ws
                     asyncio.create_task(self._subscribe_all_markets())
                     async for msg in ws:
-                        self._process_msg(msg, callback)
+                        self._process_msg(msg)
                 finally:
                     self._connected.clear()
         log.info("disconnected")
 
-    def _handle_ob_update(self, market: str, bids: list, asks: list, callback: callable):
+    def _handle_ob_update(self, market: str, bids: list, asks: list):
         ob = self.order_books.get(market)
         if ob is None:
             log.error("unknown market %s", market)
@@ -96,9 +98,9 @@ class WsClientTimex:
         ob.asks.clear()
         for ask in asks:
             ob.asks.append(Entry(price=float(ask["price"]), volume=float(ask["quantity"])))
-        callback(ob)
+        self._callbacks[market](ob)
 
-    def _process_msg(self, msg: aiohttp.WSMessage, callback: callable):
+    def _process_msg(self, msg: aiohttp.WSMessage):
         if msg.type == aiohttp.WSMsgType.TEXT:
             try:
                 obj = json.loads(msg.data)
@@ -109,7 +111,7 @@ class WsClientTimex:
                         data["market"],
                         data["rawOrderBook"]["bid"],
                         data["rawOrderBook"]["ask"],
-                        callback)
+                        )
                 request_id = obj.get("requestId")
                 if request_id is not None:
                     log.info("first raw orderbook received")
@@ -126,7 +128,7 @@ class WsClientTimex:
                     else:
                         log.warning("empty update")
                         return
-                    self._handle_ob_update(market, bids, asks, callback)
+                    self._handle_ob_update(market, bids, asks)
 
             except json.JSONDecodeError:
                 log.exception("failed to decode json")
@@ -137,10 +139,10 @@ class WsClientTimex:
         else:
             log.info("unknown message type: %s", msg.type)
 
-    def run_orderbook_updater(self, callback):
+    def run_updater(self):
         while True:
             try:
-                self._loop.run_until_complete(self._run_orderbook_updater(callback))
+                self._loop.run_until_complete(self._run_orderbook_updater())
             except Exception as e:
                 log.exception("timex orderbook updater")
             if self._closed:
@@ -150,7 +152,7 @@ class WsClientTimex:
 
     def start_background_updater(self, callback):
         self._background_updater_thread = threading.Thread(
-            target=self.run_orderbook_updater,
+            target=self.run_updater,
             args=(callback,))
         self._background_updater_thread.start()
 
@@ -158,3 +160,6 @@ class WsClientTimex:
         log.info("stopping background updater")
         self._closed = True
         self._loop.create_task(self._ws.close())
+
+    def wait_closed(self):
+        self._loop.run_until_complete(self._ws.close())
