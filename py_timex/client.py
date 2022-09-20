@@ -13,9 +13,12 @@ log.setLevel(logging.DEBUG)
 
 _URI_WS = 'wss://plasma-relay-backend.timex.io/socket/relay'
 
+EXCHANGE = "TIMEX"
 ETHUSD = "ETHUSD"
-ETHAUD = "ETHAUD"
+BTCUSD = "BTCUSD"
+ETHAUDT = "ETHAUDT"
 
+_eventTypeRawOrderBookUpdated = "RAW_ORDER_BOOK_UPDATED"
 
 OrderBook = collections.namedtuple("OrderBook", ["exchange", "market", "bids", "asks"])
 Entry = collections.namedtuple("Entry", ["price", "volume"])
@@ -41,7 +44,7 @@ class WsClientTimex:
         self._rest_queries = {}
 
     def subscribe(self, market: str, callback: callable):
-        self.order_books[market] = OrderBook(exchange="TIMEX", market=market, bids=[], asks=[])
+        self.order_books[market] = OrderBook(exchange=EXCHANGE, market=market, bids=[], asks=[])
         self._callbacks[market] = callback
 
     async def _call_rest(self, stream: str, payload: dict, callback: callable):
@@ -125,12 +128,18 @@ class WsClientTimex:
                 obj = json.loads(msg.data)
                 msg_type = obj.get("type")
                 if msg_type == "MESSAGE":
-                    data = obj["message"]["event"]["data"]
-                    return self._handle_ob_update(
-                        data["market"],
-                        data["rawOrderBook"]["bid"],
-                        data["rawOrderBook"]["ask"],
+                    event = obj["message"]["event"]
+                    if event["type"] == _eventTypeRawOrderBookUpdated:
+                        data = event["data"]
+                        return self._handle_ob_update(
+                            data["market"],
+                            data["rawOrderBook"]["bid"],
+                            data["rawOrderBook"]["ask"],
                         )
+                    else:
+                        log.warning("Unknown event type: %s. Ignoring." % event["type"])
+                        log.info(obj)
+                        return
                 if msg_type == "SUBSCRIBED":
                     return
                 request_id = obj.get("requestId")
