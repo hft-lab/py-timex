@@ -1,17 +1,20 @@
-import collections
-
 import aiohttp
 import asyncio
+
+import collections
+import base64
 import logging
 import threading
 import json
 import time
 import uuid
+import http.client
 
 log = logging.getLogger("py-timex")
 log.setLevel(logging.DEBUG)
 
 _URI_WS = 'wss://plasma-relay-backend.timex.io/socket/relay'
+_HOSTNAME_REST = 'plasma-relay-backend.timex.io'
 
 EXCHANGE = "TIMEX"
 ETHUSD = "ETHUSD"
@@ -42,12 +45,27 @@ class WsClientTimex:
         self._connected = threading.Event()
         self._callbacks = {}
         self._rest_queries = {}
+        basic_auth = f"{self._api_key}:{self._api_secret}"
+        basic_auth = base64.b64encode(basic_auth.encode("ascii"))
+        self._http_rest_auth = "Basic " + basic_auth.decode("ascii")
+        me = self._http_rest("GET", "/custody/credentials/me")
+        self.address = me["address"]
+
+    def _http_rest(self, method: str, path: str):
+        conn = http.client.HTTPSConnection(_HOSTNAME_REST)
+        conn.request(method, path, headers={"Authorization": self._http_rest_auth})
+        r = conn.getresponse()
+        ct = r.headers.get("Content-Type")
+        if ct != "application/json":
+            log.error("Non json rest response")
+            return
+        return json.loads(r.read())
 
     def subscribe(self, market: str, callback: callable):
         self.order_books[market] = OrderBook(exchange=EXCHANGE, market=market, bids=[], asks=[])
         self._callbacks[market] = callback
 
-    async def _call_rest(self, stream: str, payload: dict, callback: callable):
+    async def _ws_rest(self, stream: str, payload: dict, callback: callable):
         request_id = str(uuid.uuid4())
         msg = {"type": "REST",
                "requestId": request_id,
@@ -73,13 +91,13 @@ class WsClientTimex:
         return self._ws.send_json(msg)
 
     async def _subscribe_all_markets(self):
-        await self._call_rest("/get/trading/balances",
-                              {},
-                              self._handle_rest_balances)
+        await self._ws_rest("/get/trading/balances",
+                            {},
+                            self._handle_rest_balances)
         for market in self.order_books.keys():
-            await self._call_rest("/get/public/orderbook/raw",
-                                  {"market": market},
-                                  self._handle_rest_orderbook)
+            await self._ws_rest("/get/public/orderbook/raw",
+                                {"market": market},
+                                self._handle_rest_orderbook)
             await self._subscribe(market)
 
     def _handle_ob_update(self, market: str, bids: list, asks: list):
