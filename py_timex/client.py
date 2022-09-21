@@ -21,15 +21,21 @@ ETHUSD = "ETHUSD"
 BTCUSD = "BTCUSD"
 ETHAUDT = "ETHAUDT"
 
+AUDT = "AUDT"
+
+ORDER_ACTIVE = "ACTIVE"
+
 _eventTypeRawOrderBookUpdated = "RAW_ORDER_BOOK_UPDATED"
 _eventTypeAccountSubscription = "ACCOUNT_SUBSCRIPTION"
 
 OrderBook = collections.namedtuple("OrderBook", ["exchange", "market", "bids", "asks"])
 Entry = collections.namedtuple("Entry", ["price", "volume"])
-Balance = collections.namedtuple("Balance", ['currency', 'total_balance', 'locked_balance'])
-# TODO: add all fields
-Order = collections.namedtuple("Order",
-                               ['id', 'symbol', 'side', 'type', 'quantity', 'price'])
+Balance = collections.namedtuple(
+    "Balance", ['currency', 'total_balance', 'locked_balance'])
+Order = collections.namedtuple(
+    "Order",
+    ['id', 'symbol', 'side', 'type', 'quantity', 'price', 'status',
+     'filled_quantity', 'cancelled_quantity', 'avg_price'])
 
 
 class WsClientTimex:
@@ -52,10 +58,14 @@ class WsClientTimex:
         basic_auth = f"{self._api_key}:{self._api_secret}"
         basic_auth = base64.b64encode(basic_auth.encode("ascii"))
         self._http_rest_auth = "Basic " + basic_auth.decode("ascii")
-        me = self._http_rest("GET", "/custody/credentials/me")
-        self.address = me["address"]
         self._balances_callback = None
         self._orders_callback = None
+        self._balances_event = asyncio.Event()
+        self.address = self._get_rest_address()
+
+    def _get_rest_address(self):
+        me = self._http_rest("GET", "/custody/credentials/me")
+        return me["address"]
 
     def subscribe_balances(self, callback: callable):
         self._balances_callback = callback
@@ -116,13 +126,11 @@ class WsClientTimex:
         return self._ws.send_json(msg)
 
     async def _subscribe_all(self):
-        await self._ws_rest("/get/trading/balances",
-                            {},
-                            self._handle_rest_balances)
+        await self._ws_rest("/get/trading/balances", {}, self._handle_rest_balances)
+        await self._balances_event.wait()
         await self._account_subscribe()
         for market in self.order_books.keys():
-            await self._ws_rest("/get/public/orderbook/raw",
-                                {"market": market},
+            await self._ws_rest("/get/public/orderbook/raw", {"market": market},
                                 self._handle_rest_orderbook)
             await self._subscribe(market)
 
@@ -148,6 +156,7 @@ class WsClientTimex:
         if self._balances_callback is not None:
             for balance in self.balances.values():
                 self._balances_callback(balance)
+        self._balances_event.set()
 
     def _handle_rest_orderbook(self, obj: dict):
         status = obj.get("status")
@@ -182,6 +191,9 @@ class WsClientTimex:
         order = payload.get("order")
         if order is not None:
             if self._orders_callback is not None:
+                avg_price = order["avgPrice"]
+                if avg_price is not None:
+                    avg_price = float(avg_price)
                 self._orders_callback(
                     Order(
                         id=order["id"],
@@ -189,6 +201,10 @@ class WsClientTimex:
                         side=order["side"],
                         type=order["type"],
                         quantity=float(order["quantity"]),
+                        status=payload["orderStatus"],
+                        filled_quantity=order["filledQuantity"],
+                        cancelled_quantity=order["cancelledQuantity"],
+                        avg_price=avg_price,
                         price=float(order["price"]),
                     ))
             return
@@ -246,6 +262,7 @@ class WsClientTimex:
                         self._process_msg(msg)
                 finally:
                     self._connected.clear()
+                    self._balances_event.clear()
         log.info("disconnected")
 
     def run_updater(self):
@@ -256,8 +273,8 @@ class WsClientTimex:
                 log.exception("timex orderbook updater")
             if self._closed:
                 return
+            log.info("reconnecting in 1 second")
             time.sleep(1)
-            log.info("reconnecting")
 
     def wait_closed(self):
         self._loop.run_until_complete(self._ws.close())

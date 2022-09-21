@@ -30,13 +30,9 @@ def handle_update(update: timex.OrderBook):
         log.info(f"ask price: {ask.price}\tvolume: {ask.volume}")
         break
     # also possible to access any current orderbook
-    log.info(client.order_books[timex.ETHUSD].bids[:3])
+    log.info(client.order_books[timex.ETHAUDT].bids[:3])
     # access to balances
-    try:
-        # TODO: must be filled upon client initialization
-        log.info(client.balances[timex.ETHUSD])
-    except KeyError:
-        pass
+    log.info(client.balances[timex.AUDT])
 
 
 def handle_balance(balance: timex.Balance):
@@ -49,7 +45,7 @@ def handle_order(order: timex.Order):
 
 
 client = timex.WsClientTimex(cp["TIMEX"]["api_key"], cp["TIMEX"]["api_secret"])
-client.subscribe(timex.ETHUSD, handle_update)
+client.subscribe(timex.ETHAUDT, handle_update)
 client.subscribe(timex.BTCUSD, handle_update)
 client.subscribe_balances(handle_balance)
 client.subscribe_orders(handle_order)
