@@ -23,7 +23,13 @@ ETHAUDT = "ETHAUDT"
 
 AUDT = "AUDT"
 
-ORDER_ACTIVE = "ACTIVE"
+ORDER_STATUS_ACTIVE = "ACTIVE"
+ORDER_SIDE_BUY = "BUY"
+ORDER_SIDE_SELL = "SELL"
+ORDER_TYPE_LIMIT = "LIMIT"
+ORDER_TYPE_MARKET = "MARKET"
+ORDER_TYPE_POST_ONLY = "POST_ONLY"
+ORDER_TYPE_FILL_OR_KILL = "FILL_OR_KILL"
 
 _eventTypeRawOrderBookUpdated = "RAW_ORDER_BOOK_UPDATED"
 _eventTypeAccountSubscription = "ACCOUNT_SUBSCRIPTION"
@@ -36,6 +42,9 @@ Order = collections.namedtuple(
     "Order",
     ['id', 'symbol', 'side', 'type', 'quantity', 'price', 'status',
      'filled_quantity', 'cancelled_quantity', 'avg_price'])
+NewOrder = collections.namedtuple(
+    "NewOrder",
+    ['price', 'quantity', 'side', 'type', 'symbol', 'expireInSeconds'])
 
 
 class WsClientTimex:
@@ -63,15 +72,63 @@ class WsClientTimex:
         self._balances_event = asyncio.Event()
         self.address = self._get_rest_address()
 
-    def _get_rest_address(self):
-        me = self._http_rest("GET", "/custody/credentials/me")
-        return me["address"]
+    def run_updater(self):
+        while True:
+            try:
+                self._loop.run_until_complete(self._run_ws_loop())
+            except Exception as e:
+                log.exception("timex orderbook updater")
+            if self._closed:
+                return
+            log.info("reconnecting in 1 second")
+            time.sleep(1)
+
+    def wait_closed(self):
+        self._loop.run_until_complete(self._ws.close())
+
+    def subscribe(self, market: str, callback: callable):
+        self.order_books[market] = OrderBook(exchange=EXCHANGE, market=market, bids=[], asks=[])
+        self._callbacks[market] = callback
 
     def subscribe_balances(self, callback: callable):
         self._balances_callback = callback
 
     def subscribe_orders(self, callback: callable):
         self._orders_callback = callback
+
+    def create_orders(self, orders: list[NewOrder]):
+        prices = []
+        quantities = []
+        sides = []
+        order_types = []
+        symbols = []
+        expire_times = []
+        for order in orders:
+            prices.append(order.price)
+            quantities.append(order.quantity)
+            sides.append(order.side)
+            order_types.append(order.type)
+            symbols.append(order.symbol)
+            expire_times.append(order.expireInSeconds)
+        payload = {
+            "price": prices,
+            "side": sides,
+            "symbol": symbols,
+            "orderTypes": order_types,
+            "quantity": quantities,
+            "expireIn": expire_times,
+        }
+        return self._loop.create_task(
+            self._ws_rest("/post/trading/orders", payload, self._create_orders_cb))
+
+    def _create_orders_cb(self, data):
+        status = data.get("status")
+        if status != "SUCCESS":
+            log.error(data)
+
+    def _get_rest_address(self):
+        me = self._http_rest("GET", "/custody/credentials/me")
+        return me["address"]
 
     def _http_rest(self, method: str, path: str):
         conn = http.client.HTTPSConnection(_HOSTNAME_REST)
@@ -82,10 +139,6 @@ class WsClientTimex:
             log.error("Non json rest response")
             return
         return json.loads(r.read())
-
-    def subscribe(self, market: str, callback: callable):
-        self.order_books[market] = OrderBook(exchange=EXCHANGE, market=market, bids=[], asks=[])
-        self._callbacks[market] = callback
 
     async def _ws_rest(self, stream: str, payload: dict, callback: callable):
         request_id = str(uuid.uuid4())
@@ -264,17 +317,3 @@ class WsClientTimex:
                     self._connected.clear()
                     self._balances_event.clear()
         log.info("disconnected")
-
-    def run_updater(self):
-        while True:
-            try:
-                self._loop.run_until_complete(self._run_ws_loop())
-            except Exception as e:
-                log.exception("timex orderbook updater")
-            if self._closed:
-                return
-            log.info("reconnecting in 1 second")
-            time.sleep(1)
-
-    def wait_closed(self):
-        self._loop.run_until_complete(self._ws.close())
