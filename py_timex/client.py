@@ -60,6 +60,7 @@ class WsClientTimex:
         self._background_updater_thread = None
         self.order_books = dict[str, OrderBook]()
         self.balances = dict[str, Balance]()
+        self.on_first_connect = None
         self._closed = False
         self._connected = threading.Event()
         self._callbacks = {}
@@ -69,6 +70,7 @@ class WsClientTimex:
         self._http_rest_auth = "Basic " + basic_auth.decode("ascii")
         self._balances_callback = None
         self._orders_callback = None
+        self._on_first_connect_called = False
         self._balances_event = asyncio.Event()
         self.address = self._get_rest_address()
 
@@ -303,6 +305,13 @@ class WsClientTimex:
         else:
             log.info("unknown message type: %s", msg.type)
 
+    async def _ensure_on_first_connect_task(self):
+        if not self._on_first_connect_called:
+            self._on_first_connect_called = True
+            if self.on_first_connect is not None:
+                await self._balances_event.wait()
+                self.on_first_connect()
+
     async def _run_ws_loop(self):
         async with aiohttp.ClientSession() as s:
             async with s.ws_connect(_URI_WS) as ws:
@@ -310,7 +319,8 @@ class WsClientTimex:
                 try:
                     log.info("connected")
                     self._ws = ws
-                    asyncio.create_task(self._subscribe_all())
+                    self._loop.create_task(self._subscribe_all())
+                    self._loop.create_task(self._ensure_on_first_connect_task())
                     async for msg in ws:
                         self._process_msg(msg)
                 finally:

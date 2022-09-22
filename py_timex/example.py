@@ -19,39 +19,36 @@ log.setLevel(logging.DEBUG)
 
 class TriangleBot:
     _updates_received = 0
-    _test_order_sent = False
 
     def __init__(self, client: timex.WsClientTimex):
         self._client = client
+        client.on_first_connect = self.on_first_connect
         client.subscribe(timex.ETHAUDT, self.handle_update)
         client.subscribe(timex.BTCUSD, self.handle_update)
         client.subscribe_balances(self.handle_balance)
         client.subscribe_orders(self.handle_order)
 
+    def on_first_connect(self):
+        self._client.create_orders([
+            timex.NewOrder(
+                price=1.1,
+                quantity=36.6,
+                side=timex.ORDER_SIDE_BUY,
+                type=timex.ORDER_TYPE_LIMIT,
+                symbol=timex.ETHAUDT,
+                expireInSeconds=3,
+            )])
+
     def handle_update(self, update: timex.OrderBook):
         self._updates_received += 1
-        #log.info(f"update {update.market} bids: {len(update.bids)} asks: {len(update.asks)}")
         #for bid in update.bids:
         #    log.info(f"bid price: {bid.price}\tvolume: {bid.volume}")
-        #    break
         #for ask in update.asks:
         #    log.info(f"ask price: {ask.price}\tvolume: {ask.volume}")
-        #    break
         # also possible to access any current orderbook
         #log.info(self._client.order_books[timex.ETHAUDT].bids[:3])
         # access to balances
         #log.info(self._client.balances[timex.AUDT])
-        if not self._test_order_sent:
-            self._test_order_sent = True
-            self._client.create_orders([
-                timex.NewOrder(
-                    price=1.1,
-                    quantity=36.6,
-                    side=timex.ORDER_SIDE_BUY,
-                    type=timex.ORDER_TYPE_LIMIT,
-                    symbol=timex.ETHAUDT,
-                    expireInSeconds=3,
-                )])
 
     def handle_balance(self, balance: timex.Balance):
         log.info(balance)
