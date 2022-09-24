@@ -41,10 +41,10 @@ Balance = collections.namedtuple(
 Order = collections.namedtuple(
     "Order",
     ['id', 'symbol', 'side', 'type', 'quantity', 'price', 'status',
-     'filled_quantity', 'cancelled_quantity', 'avg_price'])
+     'filled_quantity', 'cancelled_quantity', 'avg_price', 'client_order_id'])
 NewOrder = collections.namedtuple(
     "NewOrder",
-    ['price', 'quantity', 'side', 'type', 'symbol', 'expireInSeconds'])
+    ['price', 'quantity', 'side', 'type', 'symbol', 'expire_in_seconds', 'client_order_id'])
 
 
 class WsClientTimex:
@@ -105,13 +105,15 @@ class WsClientTimex:
         order_types = []
         symbols = []
         expire_times = []
+        client_ids = []
         for order in orders:
             prices.append(order.price)
             quantities.append(order.quantity)
             sides.append(order.side)
             order_types.append(order.type)
             symbols.append(order.symbol)
-            expire_times.append(order.expireInSeconds)
+            expire_times.append(order.expire_in_seconds)
+            client_ids.append(order.client_order_id)
         payload = {
             "price": prices,
             "side": sides,
@@ -119,6 +121,7 @@ class WsClientTimex:
             "orderTypes": order_types,
             "quantity": quantities,
             "expireIn": expire_times,
+            "clientOrderId": client_ids,
         }
         return self._loop.create_task(
             self._ws_rest("/post/trading/orders", payload, callback))
@@ -259,6 +262,7 @@ class WsClientTimex:
                         cancelled_quantity=order["cancelledQuantity"],
                         avg_price=avg_price,
                         price=float(order["price"]),
+                        client_order_id=order["clientOrderId"],
                     ))
             return
         log.info("unknown")

@@ -2,6 +2,7 @@ import collections
 import logging
 import configparser
 import sys
+import uuid
 
 import py_timex.client as timex
 
@@ -37,7 +38,8 @@ class TriangleBot:
                 side=timex.ORDER_SIDE_BUY,
                 type=timex.ORDER_TYPE_LIMIT,
                 symbol=timex.ETHAUDT,
-                expireInSeconds=3,
+                expire_in_seconds=3,
+                client_order_id=str(uuid.uuid4()),
             )], self.handle_create_orders)
 
     def handle_create_orders(self, obj):
