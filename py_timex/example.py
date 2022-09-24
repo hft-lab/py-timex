@@ -1,3 +1,4 @@
+import collections
 import logging
 import configparser
 import sys
@@ -37,24 +38,23 @@ class TriangleBot:
                 type=timex.ORDER_TYPE_LIMIT,
                 symbol=timex.ETHAUDT,
                 expireInSeconds=3,
-            )])
+            )], self.handle_create_orders)
+
+    def handle_create_orders(self, obj):
+        log.info(obj)
 
     def handle_update(self, update: timex.OrderBook):
         self._updates_received += 1
-        #for bid in update.bids:
-        #    log.info(f"bid price: {bid.price}\tvolume: {bid.volume}")
-        #for ask in update.asks:
-        #    log.info(f"ask price: {ask.price}\tvolume: {ask.volume}")
-        # also possible to access any current orderbook
-        #log.info(self._client.order_books[timex.ETHAUDT].bids[:3])
-        # access to balances
-        #log.info(self._client.balances[timex.AUDT])
 
     def handle_balance(self, balance: timex.Balance):
         log.info(balance)
 
     def handle_order(self, order: timex.Order):
         log.info(order)
+        self._client.delete_orders([order.id], self.handle_delete_orders)
+
+    def handle_delete_orders(self, obj):
+        log.info(obj)
 
     def run(self):
         try:

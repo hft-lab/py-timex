@@ -98,7 +98,7 @@ class WsClientTimex:
     def subscribe_orders(self, callback: callable):
         self._orders_callback = callback
 
-    def create_orders(self, orders: list[NewOrder]):
+    def create_orders(self, orders: list[NewOrder], callback: callable):
         prices = []
         quantities = []
         sides = []
@@ -121,12 +121,10 @@ class WsClientTimex:
             "expireIn": expire_times,
         }
         return self._loop.create_task(
-            self._ws_rest("/post/trading/orders", payload, self._create_orders_cb))
+            self._ws_rest("/post/trading/orders", payload, callback))
 
-    def _create_orders_cb(self, data):
-        status = data.get("status")
-        if status != "SUCCESS":
-            log.error(data)
+    def delete_orders(self, ids: list, callback: callable):
+        self._loop.create_task(self._ws_rest("/delete/trading/orders", {"id": ids}, callback))
 
     def _get_rest_address(self):
         me = self._http_rest("GET", "/custody/credentials/me")
@@ -290,7 +288,7 @@ class WsClientTimex:
                     return
                 request_id = obj.get("requestId")
                 if request_id is not None:
-                    cb = self._rest_queries.get(request_id)
+                    cb = self._rest_queries.pop(request_id)
                     if cb is None:
                         log.error("Unknown rest request id: %s", request_id)
                         log.error(msg.data)
