@@ -32,10 +32,12 @@ ORDER_TYPE_POST_ONLY = "POST_ONLY"
 ORDER_TYPE_FILL_OR_KILL = "FILL_OR_KILL"
 
 _eventTypeRawOrderBookUpdated = "RAW_ORDER_BOOK_UPDATED"
+_eventTypeGroupOrderBookUpdated = "GROUP_ORDER_BOOK_UPDATED"
 _eventTypeAccountSubscription = "ACCOUNT_SUBSCRIPTION"
+_eventTypeMessage = "MESSAGE"
 
 OrderBook = collections.namedtuple("OrderBook", ["exchange", "market", "bids", "asks"])
-Entry = collections.namedtuple("Entry", ["price", "volume"])
+OrderBookEntry = collections.namedtuple("Entry", ["market", "price", "volume"])
 Balance = collections.namedtuple(
     "Balance", ['currency', 'total_balance', 'locked_balance'])
 Order = collections.namedtuple(
@@ -58,12 +60,14 @@ class WsClientTimex:
         self._api_secret = api_secret
         self._ws = None
         self._background_updater_thread = None
-        self.order_books = dict[str, OrderBook]()
+        self.raw_order_books = dict[str, OrderBook]()
+        self.group_order_books = dict[str, OrderBook]()
         self.balances = dict[str, Balance]()
         self.on_first_connect = None
         self._closed = False
         self._connected = threading.Event()
-        self._callbacks = {}
+        self._raw_order_book_callbacks = {}
+        self._group_order_book_callbacks = {}
         self._rest_queries = {}
         basic_auth = f"{self._api_key}:{self._api_secret}"
         basic_auth = base64.b64encode(basic_auth.encode("ascii"))
@@ -88,9 +92,14 @@ class WsClientTimex:
     def wait_closed(self):
         self._loop.run_until_complete(self._ws.close())
 
-    def subscribe(self, market: str, callback: callable):
-        self.order_books[market] = OrderBook(exchange=EXCHANGE, market=market, bids=[], asks=[])
-        self._callbacks[market] = callback
+    def subscribe_raw_order_book(self, market: str, callback: callable):
+        self.raw_order_books[market] = OrderBook(exchange=EXCHANGE, market=market, bids=[], asks=[])
+        self._raw_order_book_callbacks[market] = callback
+
+    def subscribe_group_order_book(self, market: str, callback: callable):
+        self.group_order_books[market] = OrderBook(
+            exchange=EXCHANGE, market=market, bids=[], asks=[])
+        self._group_order_book_callbacks[market] = callback
 
     def subscribe_balances(self, callback: callable):
         self._balances_callback = callback
@@ -169,7 +178,7 @@ class WsClientTimex:
         }
         return self._ws.send_json(msg)
 
-    def _subscribe(self, market: str):
+    def _subscribe_raw_order_book(self, market: str):
         msg = {
             "type": "SUBSCRIBE",
             "requestId": "uniqueID",
@@ -181,27 +190,41 @@ class WsClientTimex:
         }
         return self._ws.send_json(msg)
 
+    def _subscribe_group_order_book(self, market: str):
+        msg = {
+            "type": "SUBSCRIBE",
+            "requestId": "uniqueID",
+            "pattern": "/orderbook.group/%s" % market,
+            "auth": {
+                "id": self._api_key,
+                "secret": self._api_secret
+            },
+            "snapshot": True,
+        }
+        return self._ws.send_json(msg)
+
     async def _subscribe_all(self):
         await self._ws_rest("/get/trading/balances", {}, self._handle_rest_balances)
         await self._balances_event.wait()
         await self._account_subscribe()
-        for market in self.order_books.keys():
+        for market in self.raw_order_books.keys():
             await self._ws_rest("/get/public/orderbook/raw", {"market": market},
                                 self._handle_rest_orderbook)
-            await self._subscribe(market)
+            await self._subscribe_raw_order_book(market)
+        for market in self.group_order_books.keys():
+            await self._subscribe_group_order_book(market)
 
-    def _handle_ob_update(self, market: str, bids: list, asks: list):
-        ob = self.order_books.get(market)
-        if ob is None:
-            log.error("unknown market %s", market)
-            return
+    def _handle_order_book_update(self, market: str, new_ob: dict, v_key: str,
+                                  ob: OrderBook, cb: callable):
         ob.bids.clear()
-        for bid in bids:
-            ob.bids.append(Entry(price=float(bid["price"]), volume=float(bid["quantity"])))
+        for bid in new_ob.get("bid", []):
+            ob.bids.append(OrderBookEntry(market=market, price=float(bid["price"]),
+                                          volume=float(bid[v_key])))
         ob.asks.clear()
-        for ask in asks:
-            ob.asks.append(Entry(price=float(ask["price"]), volume=float(ask["quantity"])))
-        self._callbacks[market](ob)
+        for ask in new_ob.get("ask", []):
+            ob.asks.append(OrderBookEntry(market=market, price=float(ask["price"]),
+                                          volume=float(ask[v_key])))
+        cb(ob)
 
     def _handle_rest_balances(self, obj: dict):
         for b in obj.get("responseBody", []):
@@ -232,7 +255,9 @@ class WsClientTimex:
         else:
             log.warning("empty update")
             return
-        self._handle_ob_update(market, bids, asks)
+        ob = self.raw_order_books[market]
+        cb = self._raw_order_book_callbacks[market]
+        self._handle_order_book_update(market, r_body, "quantity", ob, cb)
 
     def _handle_ws_account_subscription(self, obj: dict):
         payload = obj.get("payload")
@@ -275,14 +300,26 @@ class WsClientTimex:
                 msg_type = obj.get("type")
                 if msg_type == _eventTypeAccountSubscription:
                     return self._handle_ws_account_subscription(obj)
-                if msg_type == "MESSAGE":
+                if msg_type == _eventTypeMessage:
                     event = obj["message"]["event"]
-                    if event["type"] == _eventTypeRawOrderBookUpdated:
-                        data = event["data"]
-                        return self._handle_ob_update(
-                            data["market"],
-                            data["rawOrderBook"]["bid"],
-                            data["rawOrderBook"]["ask"],
+                    event_type = event["type"]
+                    data = event.get("data")
+                    market = data.get("market")
+                    if event_type == _eventTypeRawOrderBookUpdated:
+                        return self._handle_order_book_update(
+                            market,
+                            data["rawOrderBook"],
+                            "quantity",
+                            self.raw_order_books[market],
+                            self._raw_order_book_callbacks[market],
+                        )
+                    if event_type == _eventTypeGroupOrderBookUpdated:
+                        return self._handle_order_book_update(
+                            market,
+                            data["orderbook"],
+                            "volume",
+                            self.group_order_books[market],
+                            self._group_order_book_callbacks[market],
                         )
                     else:
                         log.warning("Unknown event type: %s. Ignoring." % event["type"])

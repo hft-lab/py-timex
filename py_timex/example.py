@@ -20,17 +20,41 @@ log.setLevel(logging.DEBUG)
 
 
 class TriangleBot:
-    _updates_received = 0
+    _raw_updates = 0
+    _group_updates = 0
 
     def __init__(self, client: timex.WsClientTimex):
         self._client = client
         client.on_first_connect = self.on_first_connect
-        client.subscribe(timex.ETHAUDT, self.handle_update)
-        client.subscribe(timex.BTCUSD, self.handle_update)
+        #client.subscribe(timex.ETHAUDT, self.handle_update)
+        #client.subscribe(timex.BTCUSD, self.handle_update)
         client.subscribe_balances(self.handle_balance)
         client.subscribe_orders(self.handle_order)
+        client.subscribe_group_order_book(timex.ETHAUDT, self.handle_group_order_book_update)
+        client.subscribe_raw_order_book(timex.ETHAUDT, self.handle_raw_order_book_update)
+
+    def handle_group_order_book_update(self, upd: timex.OrderBookEntry):
+        self._group_updates += 1
+        ob = self._client.group_order_books[upd.market]
+        log.info("group: updates: %d, asks: %d, bids: %d",
+                 self._group_updates,
+                 len(ob.asks),
+                 len(ob.bids),
+                 )
+        print(ob)
+
+    def handle_raw_order_book_update(self, upd: timex.OrderBookEntry):
+        self._raw_updates += 1
+        ob = self._client.raw_order_books[upd.market]
+        log.info("raw: updates: %d, asks: %d, bids: %d",
+                 self._group_updates,
+                 len(ob.asks),
+                 len(ob.bids),
+                 )
+        print(ob)
 
     def on_first_connect(self):
+        return
         self._client.create_orders([
             timex.NewOrder(
                 price=1.1,
@@ -44,9 +68,6 @@ class TriangleBot:
 
     def handle_create_orders(self, obj):
         log.info(obj)
-
-    def handle_update(self, update: timex.OrderBook):
-        self._updates_received += 1
 
     def handle_balance(self, balance: timex.Balance):
         log.info(balance)
