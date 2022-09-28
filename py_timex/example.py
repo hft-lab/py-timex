@@ -24,6 +24,7 @@ class TriangleBot:
     _group_updates = 0
 
     def __init__(self, client: timex.WsClientTimex):
+        self._my_orders = dict[str: timex.Order]
         self._client = client
         client.on_first_connect = self.on_first_connect
         #client.subscribe(timex.ETHAUDT, self.handle_update)
@@ -33,9 +34,8 @@ class TriangleBot:
         client.subscribe_group_order_book(timex.ETHAUDT, self.handle_group_order_book_update)
         client.subscribe_raw_order_book(timex.ETHAUDT, self.handle_raw_order_book_update)
 
-    def handle_group_order_book_update(self, upd: timex.OrderBookEntry):
+    def handle_group_order_book_update(self, ob: timex.OrderBook):
         self._group_updates += 1
-        ob = self._client.group_order_books[upd.market]
         log.info("group: updates: %d, asks: %d, bids: %d",
                  self._group_updates,
                  len(ob.asks),
@@ -43,9 +43,8 @@ class TriangleBot:
                  )
         print(ob)
 
-    def handle_raw_order_book_update(self, upd: timex.OrderBookEntry):
+    def handle_raw_order_book_update(self, ob: timex.OrderBook):
         self._raw_updates += 1
-        ob = self._client.raw_order_books[upd.market]
         log.info("raw: updates: %d, asks: %d, bids: %d",
                  self._group_updates,
                  len(ob.asks),
@@ -54,7 +53,6 @@ class TriangleBot:
         print(ob)
 
     def on_first_connect(self):
-        return
         self._client.create_orders([
             timex.NewOrder(
                 price=1.1,
@@ -73,6 +71,7 @@ class TriangleBot:
         log.info(balance)
 
     def handle_order(self, order: timex.Order):
+        self._my_orders[order.client_order_id] = order
         log.info(order)
         self._client.delete_orders([order.id], self.handle_delete_orders)
 
