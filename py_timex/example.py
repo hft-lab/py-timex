@@ -71,7 +71,7 @@ class TriangleBot:
         log.info(balance)
 
     def handle_order(self, order: timex.Order):
-        self._my_orders[order.client_order_id] = order
+        self._my_orders.update({order.client_order_id: order})
         log.info(order)
         self._client.delete_orders([order.id], self.handle_delete_orders)
 
