@@ -61,7 +61,7 @@ class WsClientTimex:
         self._ws = None
         self._background_updater_thread = None
         self._closed = False
-        self._connected = threading.Event()
+        self._connected = asyncio.Event()
         self._raw_order_book_callbacks = {}
         self._group_order_book_callbacks = {}
         self._rest_queries = {}
@@ -162,7 +162,7 @@ class WsClientTimex:
                    "id": self._api_key,
                    "secret": self._api_secret
                }, "payload": payload}
-        self._connected.wait()
+        await self._connected.wait()
         await self._ws.send_json(msg)
         self._rest_queries[request_id] = callback
 
