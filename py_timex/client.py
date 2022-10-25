@@ -4,7 +4,6 @@ import asyncio
 import collections
 import base64
 import logging
-import threading
 import json
 import time
 import uuid
@@ -51,7 +50,7 @@ NewOrder = collections.namedtuple(
 
 class WsClientTimex:
 
-    def __init__(self, api_key=None, api_secret=None, loop=None):
+    def __init__(self, api_key=None, api_secret=None, loop=None, debug_ws=True):
         if loop is None:
             self._loop = asyncio.new_event_loop()
         else:
@@ -78,6 +77,9 @@ class WsClientTimex:
         self.group_order_books = dict[str, OrderBook]()
         self.balances = dict[str, Balance]()
         self.on_first_connect = None
+        self._debug_ws = None
+        if debug_ws:
+            self._debug_ws = open("timex_client_ws_log.json.txt", "a")
 
     def run_updater(self):
         while True:
@@ -294,11 +296,23 @@ class WsClientTimex:
         log.info("unknown")
         log.info(obj)
 
+    def _debug_ws_msg(self, obj, data):
+        if self._debug_ws is None:
+            return
+        if obj.get("type") == _eventTypeMessage:
+            evt = obj["message"]["event"]["type"]
+            if evt == _eventTypeGroupOrderBookUpdated:
+                return
+            if evt == _eventTypeRawOrderBookUpdated:
+                return
+        self._debug_ws.write(data + "\n")
+
     def _process_msg(self, msg: aiohttp.WSMessage):
         if msg.type == aiohttp.WSMsgType.TEXT:
             try:
                 obj = json.loads(msg.data)
                 msg_type = obj.get("type")
+                self._debug_ws_msg(obj, msg.data)
                 if msg_type == _eventTypeAccountSubscription:
                     return self._handle_ws_account_subscription(obj)
                 if msg_type == _eventTypeMessage:
